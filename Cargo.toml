@@ -5,3 +5,12 @@ edition = "2021"
 
 [dependencies]
 rand = "0.8.4"
+smallvec = "1.13.2"
+
+[build]
+rustflags = ["-C", "target-cpu=native"]
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = "fat"

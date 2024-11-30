@@ -1,21 +1,20 @@
-use Decision::*;
 use crate::cardutils::*;
 use crate::gamelogic::*;
+use Decision::*;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Decision {
     Hit,
     Stand,
     Double,
-    DoubleOrStand,
-    Split,
-    SplitIfDASOrHit,
     Surrender,
+    Split,
+    DoubleOrStand,
+    SplitIfDASOrHit,
     SurrenderOrHit,
     SurrenderOrStand,
     SurrenderOrSplit,
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum LUTTyupe {
@@ -37,6 +36,8 @@ pub struct BasicStrategyLUT {
 }
 
 impl BasicStrategyLUT {
+    // TODO deviations
+    #[inline(always)]
     pub fn make_move(game: &Game, hand_index: usize) -> Decision {
         let raw_move = Self::raw_move(game, hand_index);
         let can_double = game.current_round.can_double(hand_index);
@@ -50,7 +51,7 @@ impl BasicStrategyLUT {
                 } else {
                     Stand
                 }
-            },
+            }
             Stand => Stand,
             Double => {
                 if can_double {
@@ -58,14 +59,14 @@ impl BasicStrategyLUT {
                 } else {
                     Hit
                 }
-            },
+            }
             DoubleOrStand => {
                 if can_double {
                     Double
                 } else {
                     Stand
                 }
-            },
+            }
             Split => Split,
             SplitIfDASOrHit => {
                 if double_after_split {
@@ -73,14 +74,14 @@ impl BasicStrategyLUT {
                 } else {
                     Hit
                 }
-            },
+            }
             SurrenderOrHit => {
                 if can_surrender {
                     Surrender
                 } else {
                     Hit
                 }
-            },
+            }
             SurrenderOrStand => {
                 if can_surrender {
                     Surrender
@@ -94,32 +95,36 @@ impl BasicStrategyLUT {
                 } else {
                     Split
                 }
-            },
+            }
             Surrender => unreachable!(),
         }
     }
 
+    #[inline(always)]
     pub fn calculate_cache(game: &Game) {
         Self::cache_lut(Self::which_lut(game));
     }
 
+    #[inline(always)]
     pub fn cache_lut(lut: &'static BasicStrategyLUT) {
         unsafe {
             CACHED_LUT = lut;
         }
     }
-    
+
+    #[inline(always)]
     pub fn raw_move(game: &Game, hand_index: usize) -> Decision {
         let (lut, lut_type) = Self::get_lut(game, hand_index);
         let (player_index, dealer_index) = Self::get_indices(game, lut_type, hand_index);
-        
+
         match lut_type {
             LUTTyupe::Hard => lut.hard[player_index][dealer_index],
             LUTTyupe::Soft => lut.soft[player_index][dealer_index],
             LUTTyupe::Pair => lut.pair[player_index][dealer_index],
         }
     }
-       
+
+    #[inline(always)]
     fn get_indices(game: &Game, lut_type: LUTTyupe, hand_index: usize) -> (usize, usize) {
         match lut_type {
             LUTTyupe::Hard => Self::get_hard_indices(game, hand_index),
@@ -128,8 +133,12 @@ impl BasicStrategyLUT {
         }
     }
 
+    #[inline(always)]
     fn get_pair_indices(game: &Game, hand_index: usize) -> (usize, usize) {
-        let pair_of = game.current_round.hands[hand_index].cards.first_card().get_rank();
+        let pair_of = game.current_round.hands[hand_index]
+            .cards
+            .first_card()
+            .get_rank();
         let dealer_index = Self::dealer_index(game);
         let player_index = match pair_of {
             Rank::Number(n) => (n - 2) as usize,
@@ -141,47 +150,45 @@ impl BasicStrategyLUT {
         (player_index, dealer_index)
     }
 
+    #[inline(always)]
     fn get_hard_indices(game: &Game, hand_index: usize) -> (usize, usize) {
         let value = game.current_round.hands[hand_index].cards.num_value();
         let dealer_index = Self::dealer_index(game);
         let player_index = match value {
-            4..=18 => (value - 4) as usize,
+            ..=18 => (value - 4) as usize,
             19.. => 14,
-            _ => unreachable!(),
         };
         (player_index, dealer_index)
     }
 
+    #[inline(always)]
     fn get_soft_indices(game: &Game, hand_index: usize) -> (usize, usize) {
         let value = game.current_round.hands[hand_index].cards.num_value();
         let dealer_index = Self::dealer_index(game);
         let player_index = match value {
-            12..=20 => (value - 12) as usize,
-            21 => 8,
-            _ => unreachable!(),
+            ..=20 => (value - 12) as usize,
+            21.. => 8,
         };
         (player_index, dealer_index)
     }
 
+    #[inline(always)]
     fn dealer_index(game: &Game) -> usize {
         let dealer_card = game.current_round.dealer.first_card();
-        let value = dealer_card.value();
-        match value {
-            2..=11 => (value - 2) as usize,
-            _ => panic!("Invalid value"),
-        }
+        (dealer_card.value() - 2) as usize
     }
 
+    #[inline(always)]
     fn get_lut(game: &Game, hand_index: usize) -> (&'static BasicStrategyLUT, LUTTyupe) {
         (Self::get_cached_lut(), Self::type_of_lut(game, hand_index))
     }
 
+    #[inline(always)]
     fn get_cached_lut() -> &'static BasicStrategyLUT {
-        unsafe {
-            CACHED_LUT
-        }
+        unsafe { CACHED_LUT }
     }
 
+    #[inline(always)]
     fn type_of_lut(game: &Game, hand_index: usize) -> LUTTyupe {
         let can_split = game.current_round.can_split(hand_index);
         let value_type = game.current_round.hands[hand_index].cards.value_type();
@@ -194,6 +201,7 @@ impl BasicStrategyLUT {
         }
     }
 
+    #[inline(always)]
     fn which_lut(game: &Game) -> &'static BasicStrategyLUT {
         let hit_soft_17 = game.rules.hit_soft_17;
         let decks_in_shoe = game.rules.decks_in_shoe;
@@ -207,8 +215,9 @@ impl BasicStrategyLUT {
             _ => panic!("Invalid rules"),
         }
     }
-
 }
+
+// TODO more basic strategy LUTs for different rulesets
 static BS_FOUR_EIGHT_DECK_S17: BasicStrategyLUT = BasicStrategyLUT {
     hard: [
         // 2    3    4    5    6    7    8    9   10    A
@@ -218,15 +227,54 @@ static BS_FOUR_EIGHT_DECK_S17: BasicStrategyLUT = BasicStrategyLUT {
         [Hit, Hit, Hit, Hit, Hit, Hit, Hit, Hit, Hit, Hit], // Seven
         [Hit, Hit, Hit, Hit, Hit, Hit, Hit, Hit, Hit, Hit], // Eight
         [Hit, Double, Double, Double, Double, Hit, Hit, Hit, Hit, Hit], // Nine
-        [Double, Double, Double, Double, Double, Double, Double, Double, Hit, Hit], // Ten
-        [Double, Double, Double, Double, Double, Double, Double, Double, Double, Double], // Eleven
+        [
+            Double, Double, Double, Double, Double, Double, Double, Double, Hit, Hit,
+        ], // Ten
+        [
+            Double, Double, Double, Double, Double, Double, Double, Double, Double, Double,
+        ], // Eleven
         [Hit, Hit, Stand, Stand, Stand, Hit, Hit, Hit, Hit, Hit], // Twelve
         [Stand, Stand, Stand, Stand, Stand, Hit, Hit, Hit, Hit, Hit], // Thirteen
         [Stand, Stand, Stand, Stand, Stand, Hit, Hit, Hit, Hit, Hit], // Fourteen
-        [Stand, Stand, Stand, Stand, Stand, Hit, Hit, Hit, SurrenderOrHit, SurrenderOrHit], // Fifteen
-        [Stand, Stand, Stand, Stand, Stand, Hit, Hit, SurrenderOrHit, SurrenderOrHit, SurrenderOrHit], // Sixteen
-        [Stand, Stand, Stand, Stand, Stand, Stand, Stand, Stand, Stand, SurrenderOrStand], // Seventeen
-        [Stand, Stand, Stand, Stand, Stand, Stand, Stand, Stand, Stand, Stand], // Eighteen+
+        [
+            Stand,
+            Stand,
+            Stand,
+            Stand,
+            Stand,
+            Hit,
+            Hit,
+            Hit,
+            SurrenderOrHit,
+            SurrenderOrHit,
+        ], // Fifteen
+        [
+            Stand,
+            Stand,
+            Stand,
+            Stand,
+            Stand,
+            Hit,
+            Hit,
+            SurrenderOrHit,
+            SurrenderOrHit,
+            SurrenderOrHit,
+        ], // Sixteen
+        [
+            Stand,
+            Stand,
+            Stand,
+            Stand,
+            Stand,
+            Stand,
+            Stand,
+            Stand,
+            Stand,
+            SurrenderOrStand,
+        ], // Seventeen
+        [
+            Stand, Stand, Stand, Stand, Stand, Stand, Stand, Stand, Stand, Stand,
+        ], // Eighteen+
     ],
     soft: [
         // 2    3    4    5       6    7    8    9   10    A
@@ -236,22 +284,118 @@ static BS_FOUR_EIGHT_DECK_S17: BasicStrategyLUT = BasicStrategyLUT {
         [Hit, Hit, Double, Double, Double, Hit, Hit, Hit, Hit, Hit], // Fifteen
         [Hit, Hit, Double, Double, Double, Hit, Hit, Hit, Hit, Hit], // Sixteen
         [Hit, Double, Double, Double, Double, Hit, Hit, Hit, Hit, Hit], // Seventeen
-        [DoubleOrStand, DoubleOrStand, DoubleOrStand, DoubleOrStand, DoubleOrStand, Stand, Stand, Hit, Hit, Hit], // Eighteen
-        [Stand, Stand, Stand, Stand, DoubleOrStand, Stand, Stand, Stand, Stand, Stand], // Nineteen
-        [Stand, Stand, Stand, Stand, Stand, Stand, Stand, Stand, Stand, Stand], // Twenty+
+        [
+            DoubleOrStand,
+            DoubleOrStand,
+            DoubleOrStand,
+            DoubleOrStand,
+            DoubleOrStand,
+            Stand,
+            Stand,
+            Hit,
+            Hit,
+            Hit,
+        ], // Eighteen
+        [
+            Stand,
+            Stand,
+            Stand,
+            Stand,
+            DoubleOrStand,
+            Stand,
+            Stand,
+            Stand,
+            Stand,
+            Stand,
+        ], // Nineteen
+        [
+            Stand, Stand, Stand, Stand, Stand, Stand, Stand, Stand, Stand, Stand,
+        ], // Twenty+
     ],
     pair: [
         //             2                3      4      5      6      7    8    9   10    A
-        [SplitIfDASOrHit, SplitIfDASOrHit, Split, Split, Split, Split, Hit, Hit, Hit, Hit], // 2,2
-        [SplitIfDASOrHit, SplitIfDASOrHit, Split, Split, Split, Split, Hit, Hit, Hit, Hit], // 3,3
-        [Hit, Hit, Hit, SplitIfDASOrHit, SplitIfDASOrHit, Hit, Hit, Hit, Hit, Hit], // 4,4
-        [SplitIfDASOrHit, Split, Split, Split, Split, Hit, Hit, Hit, Hit, Hit], // 6,6
-        [Double, Double, Double, Double, Double, Double, Double, Double, Hit, Hit], // 5,5
+        [
+            SplitIfDASOrHit,
+            SplitIfDASOrHit,
+            Split,
+            Split,
+            Split,
+            Split,
+            Hit,
+            Hit,
+            Hit,
+            Hit,
+        ], // 2,2
+        [
+            SplitIfDASOrHit,
+            SplitIfDASOrHit,
+            Split,
+            Split,
+            Split,
+            Split,
+            Hit,
+            Hit,
+            Hit,
+            Hit,
+        ], // 3,3
+        [
+            Hit,
+            Hit,
+            Hit,
+            SplitIfDASOrHit,
+            SplitIfDASOrHit,
+            Hit,
+            Hit,
+            Hit,
+            Hit,
+            Hit,
+        ], // 4,4
+        [
+            SplitIfDASOrHit,
+            Split,
+            Split,
+            Split,
+            Split,
+            Hit,
+            Hit,
+            Hit,
+            Hit,
+            Hit,
+        ], // 6,6
+        [
+            Double, Double, Double, Double, Double, Double, Double, Double, Hit, Hit,
+        ], // 5,5
         [Split, Split, Split, Split, Split, Split, Hit, Hit, Hit, Hit], // 7,7
-        [Split, Split, Split, Split, Split, Split, Split, Split, Split, SurrenderOrSplit], // 8,8
-        [Split, Split, Split, Split, Split, Split, Split, Split, Split, SurrenderOrSplit], // 9,9
-        [Stand, Stand, Stand, Stand, Stand, Stand, Stand, Stand, Stand, Stand], // 10,10
-        [Split, Split, Split, Split, Split, Split, Split, Split, Split, Split], // A,A
+        [
+            Split,
+            Split,
+            Split,
+            Split,
+            Split,
+            Split,
+            Split,
+            Split,
+            Split,
+            SurrenderOrSplit,
+        ], // 8,8
+        [
+            Split,
+            Split,
+            Split,
+            Split,
+            Split,
+            Split,
+            Split,
+            Split,
+            Split,
+            SurrenderOrSplit,
+        ], // 9,9
+        [
+            Stand, Stand, Stand, Stand, Stand, Stand, Stand, Stand, Stand, Stand,
+        ], // 10,10
+        [
+            Split, Split, Split, Split, Split, Split, Split, Split, Split, Split,
+        ], // A,A
     ],
 };
 
